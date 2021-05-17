@@ -21,20 +21,23 @@ dns_raw = File.readlines("zone")
 #parsing dns A and Cname with hashes.
 #The :A is key of A and :C is key of Cname.
 #Depends on record type the source stored in array type.
-def parse_dns(dns_list)
-  lists = { :A => [], :C => [] } #initialize a dns hash for this function.
 
-  #send each line from Zone list using each
-  dns_list.each { |list|
-    #Delete the whitespace and \n from the line
-    #Split the line by comma and store only source and destination.
-    source = list.gsub(/\s/, "").split(",")[1..2]
+def parse_dns(dns_raw)
+  #Delete the whitespace and \n from the line and Split the line by comma.
+  #change each line to an array from Zone and store to the dns_list
+  dns_list = dns_raw.map { |list| list.gsub(/\s/, "").split(",") if list != "\n" }
+  dns_list.delete(nil) #delete the nil
+  dns_hashLists = {} #declare hash
 
-    #If it A record type, then push into :A key.
-    #else, it is Cname.so,push into :C key.
-    lists[list[0].to_sym].push(source) if (list[0] == "A" || list[0] == "C")
-  }
-  lists  #return the hash
+  #Find how many record in there and store the value depends on the record type
+  dns_list.each do |record_type, source, destination|
+    if (dns_hashLists.has_key?(record_type.to_sym))
+      dns_hashLists[record_type.to_sym].push([source, destination])
+    else
+      dns_hashLists[record_type.to_sym] = [[source, destination]]
+    end
+  end
+  dns_hashLists
 end
 
 #Find the Ipaddress.
@@ -45,7 +48,7 @@ def resolve(dnsRecords, lookupChain, url)
     lookupChain.push(destination[1]) #if domain is in A type push into lookup chain, return nil.
   else
     #Check A record type have that domain.
-    destination = dnsRecords[:C].find { |src| src[0] == url if src }
+    destination = dnsRecords[:CNAME].find { |src| src[0] == url if src }
     if (destination != nil)
       #if domain is in Cname type push into lookup chain, return nil.
       lookupChain.push(destination[1])
