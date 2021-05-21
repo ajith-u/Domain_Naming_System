@@ -22,41 +22,35 @@ dns_raw = File.readlines("zone")
 #The :A is key of A and :C is key of Cname.
 #Depends on record type the source stored in array type.
 
-def parse_dns(dns_raw)
-  #Delete the whitespace and \n from the line and Split the line by comma.
-  #change each line to an array from Zone and store to the dns_list
-  dns_list = dns_raw.map { |list| list.gsub(/\s/, "").split(",") if list != "\n" }
-  dns_list.delete(nil) #delete the nil
-  dns_hashLists = {} #declare hash
-
-  #Find how many record in there and store the value depends on the record type
-  dns_list.each do |record_type, source, destination|
-    if (dns_hashLists.has_key?(record_type.to_sym))
-      dns_hashLists[record_type.to_sym].push([source, destination])
-    else
-      dns_hashLists[record_type.to_sym] = [[source, destination]]
-    end
+def parse_dns(raw)
+  raw.
+    reject { |line| line.empty? || line[0] == "#" }. #remove invalid character from zone
+    map { |line| line.strip.split(", ") }. #split the line by ", "
+    reject do |record| #reject if record less than 3 record.
+    record.length < 3
+  end.
+    each_with_object({}) do |record, records| # create a hash and store the value
+    records[record[1]] = {
+      type: record[0],
+      target: record[2],
+    }
   end
-  dns_hashLists
 end
 
 #Find the Ipaddress.
-def resolve(dnsRecords, lookupChain, url)
-  #Check A record type have that domain.
-  destination = dnsRecords[:A].find { |src| (src[0] == url) if src }
-  if (destination != nil)
-    lookupChain.push(destination[1]) #if domain is in A type push into lookup chain, return nil.
-  else
-    #Check A record type have that domain.
-    destination = dnsRecords[:CNAME].find { |src| src[0] == url if src }
-    if (destination != nil)
-      #if domain is in Cname type push into lookup chain, return nil.
-      lookupChain.push(destination[1])
-      resolve(dnsRecords, lookupChain, destination[1])
-    else
-      #If there is nothing domain in that zone then retrun error
-      lookupChain = ["Error: record not found for " + url]
-    end
+def resolve(dns_records, lookup_chain, domain)
+  record = dns_records[domain]
+  if (!record) #if there is no record
+    lookup_chain = ["Error: Record not found for " + domain]
+    return lookup_chain
+  elsif record[:type] == "CNAME" #If CNAME source,again call the resolve with target
+    lookup_chain << record[:target]
+    lookup_chain = resolve(dns_records, lookup_chain, record[:target])
+  elsif record[:type] == "A" #If A record source, its a destination.So, return the Ip address along with via sources
+    return lookup_chain << record[:target]
+  else #if there is neither CNAME nor A source.It means its invalid source in this zone
+    lookup_chain << "Invalid record type for " + domain
+    return
   end
 end
 
